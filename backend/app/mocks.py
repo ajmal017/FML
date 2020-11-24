@@ -1,12 +1,14 @@
 import sys
+import datetime
 # gives backend app access to modules in algDev by adding directory to pythonpath
 sys.path.insert(1, '../')
 import numpy as np
 # gonna have to rewrite this once DB structure in place
 import algDev.API.dataGatherer as dataGatherer
 import algDev.API.indicators as indicators
+import algDev.API.backtest as backtest
+import algDev.API.models as models
 import algDev.db.wrapper as wrapper
-# import algDev.API.models as models
 
 
 def getCategoryDescriptionAtDate(asset, date):
@@ -413,12 +415,43 @@ def getAssetValueOverTime(name, period):
 
 
 def getAllAssetNames():
-  # THIS IS GONNA NEED TO BE SORTED
-  return dataGatherer.getTickers()
+  return sorted(wrapper.getTickers())
 
-def getAllModels():
-  # THIS IS GONNA NEED TO BE SORTED
-  return ['Model 1', 'Model 2', 'Model 3', 'Model 4', 'Model 5']
+def getModelsForEquity(ticker):
+  tupList = wrapper.loadModelCollections(ticker)
+
+  objList = []
+
+  for item in tupList:
+    paramsString = item[8].replace(',',', ').replace('_', ' ')
+    nameParamsID = (item[7], )
+    tempDict = {'name': item[7], 'params': paramsString, 'id': item[0]}
+    objList.append(tempDict)
+  
+  return objList
+
+
+def getModelGraphsData(modelCollectionID):
+  result = models.loadModelResult(modelCollectionID)
+  print('result from load modell collection ID is', result)
+
+  formatted = []
+
+  for item in result:
+    currentIndicator = {}
+    currentIndicator['indicator'] = item['name']
+    currentIndicator['prediction'] = item['prediction']
+    currentSeries = {'name': item['name'], 'series':[]}
+
+    for i in range(len(item['values'])):
+      seriesEntry = {'name': i, 'value': item['values'][i][0]}
+      currentSeries['series'].append(seriesEntry)
+
+    currentIndicator['data'] = [currentSeries]
+    formatted.append(currentIndicator)
+
+  return formatted
+
 
 multiseriesData = [
       {
@@ -704,8 +737,89 @@ def getBacktesterDates():
   toReturn = {'firstDate': dbStartDate, 'endDate': dbEndDate}
   return toReturn
 
-  
-# def getTradingAlgorithms():
-#   tradingAlgs = models.getTradingAlgorithms()
-#   return tradingAlgs # LOOK INTO THIS SHIT MORE
+def getTradingAlgorithms():
+  wrapperResult = wrapper.getTradingAlgorithms()
+  objArr = []
 
+  for tup in wrapperResult:
+    tempObj = {}
+    tempObj['name'] = tup[9]
+    tempObj['id'] = tup[0]
+    tempObj['modelCollectionIds'] = tup[7]
+    
+    params = []
+    params.append({'name': 'tickers', 'value': tup[1]})
+    params.append({'name': 'features', 'value': tup[2]})
+    params.append({'name': 'length', 'value': tup[3]})
+    params.append({'name': 'upper threshold', 'value': float(tup[4])})
+    params.append({'name': 'lower threshold', 'value': float(tup[5])})
+    params.append({'name': 'period', 'value': tup[6]})
+    params.append({'name': 'voting type', 'value': tup[8]})
+    tempObj['parameters'] = params
+
+    objArr.append(tempObj)
+  
+  return objArr
+
+
+
+def runBacktester(start, end, portfolioValue, algID):
+  startDate = toDate(start)
+  endDate = toDate(end)
+
+  result = backtest.run_backtest(startDate, endDate, portfolioValue, algID)
+
+  for stat in result['stats']:
+    stat['value'] = round(stat['value'], 3)
+    split = stat['name'].split('_')
+    for i in range(len(split)):
+      split[i] = (split[i][0].upper()) + split[i][1:]
+    
+    newName = " ".join(split)
+    stat['name'] = newName
+
+
+  portfolioSeries = []
+  snpSeries = []
+  initialSeries = []
+
+  initialPortValue = result['portfolioValues'][0]
+  initialSNPValue = result['snpVals'][0]
+  initialInitialValue = result['initialValues'][0]
+
+  # calc percent changes
+  for i in range(len(result['dates'])):
+    print('initial portfolio value:', initialPortValue)
+    print('new portfolio value:', initialPortValue)
+    portPctChange = ((result['portfolioValues'][i] - initialPortValue) / initialPortValue) * 100
+    print('port percent change', portPctChange)
+
+    snpPctChange = ((result['snpVals'][i] - initialSNPValue) / initialSNPValue) * 100
+    initialPctChange = ((result['initialValues'][i] - initialInitialValue) / initialInitialValue) * 100
+
+    portObj = {'name': i, 'value': portPctChange}
+    snpObj = {'name': i, 'value': snpPctChange}
+    initialObj = {'name': i, 'value': initialPctChange}
+
+    portfolioSeries.append(portObj)
+    snpSeries.append(snpObj)
+    initialSeries.append(initialObj)
+  
+  graphData = [{'name': 'Portfolio Value', 'series': portfolioSeries}, 
+              {'name': 'SNP Value', 'series': snpSeries},
+              {'name': 'Initial Value', 'series': initialSeries}
+  ]
+
+  result['graphData'] = graphData
+
+  formattedPositions = []
+  
+  return result
+
+# def run_backtest(start_date, end_date, pf_value, tradingAlgorithmId):
+
+
+def toDate(dateString): 
+    date = datetime.datetime.strptime(dateString, "%Y-%m-%dT%H:%M:%S.%fZ").date()
+    dt = datetime.datetime(date.year, date.month, date.day)
+    return dt

@@ -18,12 +18,13 @@ export class DashboardGraphsComponent implements OnInit {
   models:string[];
   assetData:any[] = [];
   modelData:any[] = [];
-  activeModel:string = '';
+  activeModelID:string;
   indicators:string[];
   mostRecentIndicator:string;
   indicatorSelected:boolean = false;
   numParams:any;
   invalidNumParams:boolean = false;
+  equities:string[];
 
   invalidAssetField:boolean = false;
   mostRecentEquity:string;
@@ -39,8 +40,8 @@ export class DashboardGraphsComponent implements OnInit {
 
   populateDropdown(){
     this.dataService.getDropdownInfo().subscribe(result => {
-      this.models = result['models'];
       this.indicators = result['indicators'];
+      this.equities = result['equities'];
     })
     
   }
@@ -66,6 +67,7 @@ export class DashboardGraphsComponent implements OnInit {
     }
     console.log('most recent equity', this.mostRecentEquity);
     this.dataService.getCustomIndicatorsInfo(formatted, this.mostRecentEquity).subscribe(result => {
+      console.log('indicator data from backend looks like', result);
       this.handleNewGraphData(result, formatted + ' ' + this.mostRecentEquity, 'indicator');
     })
   }
@@ -86,17 +88,19 @@ export class DashboardGraphsComponent implements OnInit {
   }
 
   handleNewGraphData(result:any, value:string, dataType:string){
+    console.log('data before was ', this.assetData);
     if(result['data']){
       this.invalidAssetField = false;
       let tempObjArr = result['data']
 
       for(let tempObj of tempObjArr){
         tempObj['type'] = dataType;
-        tempObj['name'] = value;
         console.log('tempObj to be added', tempObj);
         let assetDataCopy = [...this.assetData];
         assetDataCopy.push(tempObj);
         this.assetData = assetDataCopy;
+        console.log('data after is ', this.assetData);
+
       }
       // handle updating equity for indicators performance
 
@@ -146,10 +150,24 @@ export class DashboardGraphsComponent implements OnInit {
   }
 
   getModelData($event){
-    this.activeModel = '';
+    console.log('get model data event is ', $event);
 
-    let modelName = $event['value'];
-    this.activeModel = modelName;    
+    this.activeModelID = $event['value']['id'];
+
+    // subscribe to data call, set render thing to true, input the model id into the indicators service to fetch the data
+  
+  }
+
+  getModelsForEquity($event){
+    let ticker = $event['value'];
+    console.log('event value is', $event['value']);
+
+    this.dataService.getModelsForEquity(ticker).subscribe(result => {
+      console.log('models collections stuff returned from service is', result['data']);
+      this.models = result['data'];
+
+    })
+
   }
 
 
@@ -175,7 +193,7 @@ export class DashboardGraphsComponent implements OnInit {
     view: any[] = [600, 400];
   
     lineColorScheme = {
-      domain: ['#5AA454', '#A10A28', '#C7B42C', '#AAAAAA']
+      domain: ['#5AA454', '#A10A28', '#C7B42C', '#EF6F6C', '#7FC6B8', '#AAAAAA']
     };
   
     lineOnSelect(data): void {

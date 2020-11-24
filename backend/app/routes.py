@@ -6,10 +6,14 @@ import app.mocks as mocks
 
 @app.route('/dashboard-dropdown', methods=['GET'])
 def getModelsAndAssets():
-  mockModels = mocks.getAllModels()
+  tickers = mocks.getAllAssetNames()
+  return jsonify({'indicators': sorted([*mocks.indicatorDict]), 'equities': tickers})
 
-  return jsonify({'models': mockModels, 'indicators': sorted([*mocks.indicatorDict])})
 
+@app.route('/dashboard-dropdown/<string:ticker>', methods=['GET'])
+def getModelsForEquity(ticker):
+  modelCollections = mocks.getModelsForEquity(ticker)
+  return jsonify({'data': modelCollections})
 
 @app.route('/asset-value-over-time/<string:name>/<string:period>', methods=['GET'])
 def get_description_over_time(name, period):
@@ -77,9 +81,10 @@ def get_performance_stats(day):
   return jsonify({'data':mock})
 
 
-@app.route('/modelPerformance/<string:model>/<string:equity>', methods=['GET'])
-def get_indicators_for_asset(model, equity):
-  return jsonify({'data': mocks.modelData})
+@app.route('/modelPerformance/<string:modelID>', methods=['GET'])
+def get_indicators_for_model(modelID):
+  result = mocks.getModelGraphsData(modelID)
+  return jsonify({'data': result})
 
 @app.route('/indicators/<string:indicator>/params', methods=['GET'])
 def getNumParams(indicator):
@@ -98,6 +103,15 @@ def getTopAssets():
 
 @app.route('/backtester/dropdown', methods=['GET'])
 def getDates():
-  print('got here')
+  tradingAlgs = mocks.getTradingAlgorithms()
   result = mocks.getBacktesterDates()
+  result['models'] = tradingAlgs
   return jsonify(result)
+
+@app.route('/backtester/run', methods=['POST'])
+def runBacktester():
+  json = request.get_json()
+  result = mocks.runBacktester(json['startDate'], json['endDate'], int(json['portfolioValue']), json['model'])
+  return jsonify(result)
+
+

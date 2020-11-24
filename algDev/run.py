@@ -7,10 +7,14 @@ from algDev.algorithms.cnn import CNN
 from algDev.algorithms.svm import SVM
 from algDev.API.indicators import get_indicator_value
 from algDev.db.wrapper import *
-from algDev.tests import trading_alg_test, asset_alloc_test
+from algDev.tests import trading_alg_test, asset_alloc_test, test_svm
+from algDev.db.populate_models_table import build_example_model, get_tas, test_add_model, test_add_model_collection
+from algDev.API.models import loadTradingAlgorithm, loadModelResult
+from algDev.tests.test_backtest import run_test
+from algDev.tests.hyperparam_tst import hyper_param_haul
 
 def test_one():
-    eq = Equity('AAPL')
+    eq = Equity('QCOM')
     print(eq.opens)
     print(eq.dates)
     print(getTickers())
@@ -48,5 +52,42 @@ def test_six():
     trading_alg_test.test_conf_matrix_model_coll()
 
 def test_seven():
-    trading_alg_test.hyper_param_tuning()
+    ticker_list = [['AAPL']]
+    features_list = [['macd_9_18','macdSig','closes']]
+    model_params = [{'gamma':.1, "C" :1},{'gamma':1, "C" :1},{'gamma':10, "C" : 1},{'gamma':100, "C" :1},{'gamma':.1, "C" :.1},{'gamma':1, "C" :.1},{'gamma':10, "C" :.1},{'gamma':100, "C" :.1},{'gamma':10, "C" :.001},{'gamma':100, "C" :.001}]
+    hp = hyper_param_haul(features_list,ticker_list, model_params)
+
+def test_eight():
+    test_svm.run_3()
+
+def test_nine():
+    build_example_model()
+    # test_add_model()
+    # test_add_model_collection()
+
+def test_ten():
+    print(get_tas())
+
+def test_eleven():
+    trading_alg_test.grid_search()
+
+def test_twelve():
+    ta_entity = getTradingAlgorithms()
+    ta_id = ta_entity[0][0]
+    trading_alg = loadTradingAlgorithm(ta_id)
+
+    print(trading_alg)
+
+def backtest():
+    run_test()
+
+def getMCs():
+    print(getModelCollections())
+
+def getMCData():
+    mcId = '4ac2fece-d7e8-4027-8d30-c78575b97811'
+
+    result = loadModelResult(mcId)
+
+    print(result)
 

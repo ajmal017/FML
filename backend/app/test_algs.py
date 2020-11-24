@@ -4,4 +4,5 @@ sys.path.insert(1, '../')
 
 from algDev import run
 
-run.test_seven()
+run.test_three()
+

@@ -22,19 +22,25 @@ class ModelCollection:
                                     upper_threshold: documentation for label threshold,
                                     period: documentation for label period,
                                     cnn_split: number of cnns to use if necessary
+            models {list} -- any pretrained models to import
+            model_params {dictionary} -- model parameters to use (gamma, C) for all individual models
         """
         self.eq = Equity(ticker)
         self.ticker = ticker
         self.features = data_generator.parse_features(features)
         self.type = type
         self.params = params
+        if 'data_splits' not in self.params:
+            self.add_params({'data_splits': [0.8,0.2]})
+        
         self.model_params = model_params
         if len(models) > 0:
             self.models = models
+            self.update_accuracy()
         else:
             assert(len(features)>0)
             self.models = self.init_models()
-        self.accuracy = 0.0
+            self.accuracy = 0.0
         
     def init_models(self):
         """Runs through all features and creates the appropriate models
@@ -51,7 +57,8 @@ class ModelCollection:
             for feature in self.features:
                 X,y = data_generator.gen_svm_data(self.eq, [feature], self.params['length'], self.params['upper_threshold'], self.params['period'])
                 
-                models.append(SVM(X,y,title=feature, params= self.model_params))
+                models.append(SVM(X,y,title=feature, params= self.model_params,metrics={}))
+
         return models
 
     def update_params(self, params):
@@ -77,32 +84,56 @@ class ModelCollection:
             print("Training Models for ", self.eq.ticker)
         for i, model in enumerate(self.models):
             model.train(self.params['data_splits'], verbose = verbose)
+            
         self.update_accuracy()
 
     def plot_rocs(self, verbose=False):
+        """ Plot roc curve for each model
+        """
         for model in self.models:
             model.plot_roc(verbose)
 
     def get_conf_matricies(self, verbose=False):
+        """ returns confusion matrices for each model
+        """
+        cm_list =[]
         for model in self.models:
-            model.build_conf_matrix(self.params['data_splits'])
+            cm = model.build_conf_matrix(self.params['data_splits'])
+            cm_list.append(cm)
 
+        return cm_list
+
+    def get_voter_metrics(self, verbose=False):
+        """ calculates metrics for voter 
+        """
+        for model in self.models:
+            splits= self.params['data_splits']
+            model.voter_metrics(splits, verbose)
+        
+        
+
+        
     def update_accuracy(self):
         """Update the accuracy of the entire collection by averaging the
             individual accuracies, could probably be done better
         """
         acc = 0.0
         for model in self.models:
-            acc += model.metrics['acc']
 
+            print("Model ", model.title, " acc ", model.metrics['acc'])
+            acc += model.metrics['acc']
+        
         self.accuracy = acc/len(self.models)
 
+
     def predict(self, date, verbose=False):
+        """ generate predictions for given date
+        """
         if verbose:
             print(date)
         start_index = self.eq.get_index_from_date(date)
         end_index = start_index + self.params['length']
-
+        
         predictions = []
         if self.type=='cnn':
             X_i = data_generator.get_subset(self.eq, self.features, start_index, end_index, self.type)
@@ -112,12 +143,14 @@ class ModelCollection:
             for i,f in enumerate(self.features):
                 X_i = data_generator.get_subset(self.eq, [f], start_index, end_index, self.type)
                 predictions.append(self.models[i].predict(X_i))
-        
+        print("Todays Features: ", X_i)
         return predictions
 
-    def plot_hyperparam_viz(self, verbose=False):
+    def grid_search_coll(self, verbose=False):
+        ''' do grid search on model parameters gamma, C for each model
+        '''
         for model in self.models:
-            model.generate_hyperparam_viz(verbose)
+            model.grid_search_model(verbose)
 
 
     

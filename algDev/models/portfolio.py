@@ -22,25 +22,28 @@ class Portfolio:
 
     def __init__(self, value, init_date, trading_algorithm, asset_strategy, days = 500, start_price = 'O', stop_price = 'C', verbose=False):
         self.positions = []
-        self.free_cash = {init_date: value}
-        self.init_positions(init_date, days, verbose)
+        self.predictions = []
+        day_before = init_date - datetime.timedelta(days=1)
+        self.free_cash = {day_before: value}
 
         self.days = days
         self.start_price = start_price
         self.stop_price = stop_price
 
         self.trading_algorithm = trading_algorithm
-        self.asset_strategy = asset_strategy
+        self.asset_strategy = asset_strategy        
+
+        self.init_positions(init_date, days, verbose)
+        self.init_preds()
 
     def init_positions(self, init_date, days = 500, verbose=False):
-        here = os.path.abspath(os.path.dirname(__file__))
-        data_directory = os.path.join(here, '..\\data')
-        eq_directory = os.path.join(data_directory, 'equities')
-        for eq in self.trading_algorithm.tickers:
-            eq_file = os.path.join(eq_directory, eq + '.xlsx')
-            e = Equity(eq_file)
-            position = Position(e, init_date, days, verbose)
+        for eq in self.trading_algorithm.eqs:
+            position = Position(eq, init_date, days, verbose)
             self.positions.append(position)
+    
+    def init_preds(self):
+        for eq in self.trading_algorithm.eqs:
+            self.predictions.append({'ticker':eq.ticker, 'predictions':[]})
     
     def getPosition(self, ticker, verbose=False):
 
@@ -49,40 +52,49 @@ class Portfolio:
             if p.ticker in ticker:
                 return p
 
+    def add_predictions(self, predictions, date):
+
+        for i, pos in enumerate(self.positions):
+            self.predictions[i]['predictions'].append({'date': date, 'prediction': predictions[i][0], 'confidence': predictions[i][1]})
+
     def realloc(self, date, verbose=False):
 
         ##ASK LUKE ABOUT THIS LINE
         self.free_cash[date] = self.free_cash[list(self.free_cash.keys())[len(self.free_cash.keys())-1]]
-        
-        self.update_closings(self.trading_algorithm.getPeriod(), self.trading_algorithm.getUpperThreshold(), self.trading_algorithm.getLowerThreshold(), date, verbose)
-
+        print("Free Cash: ", self.free_cash)
         # Dictionary of tickers and tuples of prediction and confidence
         predictions = self.trading_algorithm.predict(date)
-        
+        self.add_predictions(predictions, date)
+        print("Predictions ", predictions)
         ## After that loop, predictions will be 1/0/-1 corresponding to buy/do nothing/short
         ##Confidence is the output of the model, from which we can calculate expected return
         ## allocations will be a decimal indicating how much of our available cash we should give to that
         
         ## for first try, we will just ignore allocation, but this should turn allcations into dollar amounts
-        allocations = self.asset_strategy(date, positions, predictions, verbose) * self.free_cash[date]
-                
+        print("Allocation Breakdown ", self.asset_strategy.allocate(date, self.positions, predictions, verbose))
+        allocations = self.asset_strategy.allocate(date, self.positions, predictions, verbose) * self.free_cash[date]
+        print("Allocations in Total", allocations)
         for i, pos in enumerate(self.positions):
-            self.free_cash[date] -= pos.purchase(predictions[i], allocations[i], date, verbose)
+            self.free_cash[date] = self.free_cash[date] - pos.purchase(predictions[i][0], allocations[i], date, verbose)
         if verbose is True:
             print("Current Free Cash: ", self.free_cash[date])
             print("Current Positions Value: ", self.getValue(date) - self.free_cash[date])
+        
+        print("Todays Cash after making purchases", self.free_cash[date])
+        self.trading_algorithm.update(date)
 
-        self.trading_algorithm.update()
+        self.update_closings(date, self.asset_strategy.closing_type, verbose)
+        print("Todays Cash after making sales", self.free_cash[date])
         return self.update(verbose)
 
     def update(self, verbose=False):
         return 0
 
-    def update_closings(self, date, verbose=False):
+    def update_closings(self, date, closing_type, verbose=False):
 
         for i, pos in enumerate(self.positions):
         
-            self.free_cash[date] += pos.handle_closings(self.trading_algorithm.params, date, verbose)
+            self.free_cash[date] += pos.handle_closings(self.trading_algorithm.params, date, closing_type, verbose)
         
     def date_ob(self, date, verbose=False):
 

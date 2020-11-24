@@ -86,8 +86,14 @@ def gen_svm_data(eq, feature, length, threshold, period):
     feature = create_features(eq, feature)
     
     X, y = format_data(eq.ticker, feature, 'svm', length, threshold, period)
-    
+
     return X.reshape(X.shape[0],X.shape[1],),y
+
+def unison_shuffled_copies(a, b):
+    
+    assert len(a) == len(b)
+    p = np.random.permutation(len(a))
+    return a[p], b[p]
 
 def split_data(X, y, splits):
     """Splits the data for training and testing, also validation if necessary
@@ -104,6 +110,8 @@ def split_data(X, y, splits):
     
     assert np.sum(splits) == 1
 
+    X,y = unison_shuffled_copies(X,y)
+
     train_length = int(splits[0] * len(X))
 
     X_train = X[0:train_length]
@@ -114,12 +122,12 @@ def split_data(X, y, splits):
         y_val = y[train_length:train_length+val_length]
         X_val = X[train_length:train_length+val_length]
         test_length = len(X) - train_length - val_length
-        y_test = y[(-1 * test_length):-1]
-        X_test = X[(-1 * test_length):-1]
+        y_test = y[(-1 * test_length)]
+        X_test = X[(-1 * test_length)]
         return X_train, y_train, X_val, y_val, X_test, y_test
     else:
-        X_test = X[train_length:-1]
-        y_test = y[train_length:-1]
+        X_test = X[train_length:]
+        y_test = y[train_length:]
         return X_train, y_train, X_test, y_test
 
 def format_data(ticker, data, type, length, threshold, period):
